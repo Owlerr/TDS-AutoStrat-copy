@@ -12,7 +12,7 @@
 | `Upgrade` | `index, path` | Улучшает башню по указанному индексу. |
 | `Sell` | `index` | Продает башню по указанному индексу. |
 | `SetTarget` | `index, mode` | Изменяет нацеливание (например, `«First»`, `«Strong»`). |
-| `SetOption` | `idx, name, val, wave` | Настраивает переключатели башни (например, управление единицами). |
+| `SetOption` | `idx, name, val, wave` | Настраивает переключатели башни (например, управление боевыми единицами). |
 | `Ability` | `idx, name, data, loop` | Активирует способности; `loop` включает автоматическое применение. |
 
 ---
@@ -21,7 +21,7 @@
 
 Будет добавлено в будущем
 
-* **`SetTarget`**: Используйте эту опцию для оптимизации урона, переключая башни в режим `«Strong»` для боссов или `«Last»` для контроля утечек.
+* **`SetTarget`**: Используйте эту опцию для оптимизации урона, переключая башни в режим `«Strong»` для боссов или `«Last»` для контроля срятавшихся.
 * **`SetOption`**: Необходимо для башен, таких как **Mercenary Base**, где требуется выбор юнитов.
 * **`Ability`**: Может использоваться для однократной активации (например, **Call to Arms**) или устанавливаться в `loop = true`.
 
@@ -30,13 +30,13 @@
 ##  Управление матчем
 * **`TDS:GameInfo(map, modifiers)`** — выбирает желаемую карту и модификаторы.
 * **`TDS:VoteSkip()`** — отправляет запрос на пропуск с встроенным циклом повторных попыток.
-* **`TDS:UseTimeScale(value)`** — Устанавливает скорость игры (от `0.5` до `2`). *Требуются билеты.*
+* **`TDS:UseTimeScale(value)`** — Устанавливает скорость игры (от `0.5` до `2`). *Требуются тикеты.*
 
 ---
 
 ### ** Быстрая настройка**
 
-Чтобы запустить это автоматически, поместите свой скрипт в папку **`autoexec`** вашего исполнителя. Используйте приведенный ниже шаблон для настройки параметров:
+Чтобы запустить это автоматически, поместите свой скрипт в папку **`autoexec`** вашего экзекьютора. Используйте приведенный ниже шаблон для настройки параметров:
 
 ```lua
 -- [[ КОНФИГУРАЦИЯ ]]
@@ -50,10 +50,9 @@ _G.SendWebhook   = false -- Установите значение true, чтоб
 _G.Webhook       = «YOUR-WEBHOOK-URL-HERE» 
 
 -- [[ INITIALIZE LIBRARY ]]
-local TDS = loadstring(game:HttpGet(«https://raw.githubusercontent.com/DuxiiT/tds-autostrat/refs/heads/main/main.lua»)) ()
-local TD = loadstring(game:HttpGet(«https://raw.githubusercontent.com/DuxiiT/auto-strat/refs/heads/main/Addons/Place.lua»))()
+local TDS = loadstring(game:HttpGet("https://raw.githubusercontent.com/Owlerr/TDS-AutoStrat-copy/main/Library.lua"))()
 
--- [[ ЗАПУСТИТЬ СТРАТЕГИЮ ]]
+-- [[ СТРАТЕГИЯ ]]
 -- Пример:
 -- TDS:Loadout(«Soldier», «Farm»)
 -- TDS:Mode(«Frost»)
