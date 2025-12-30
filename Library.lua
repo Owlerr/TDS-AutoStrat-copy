@@ -1,8 +1,9 @@
 -- MADE BY Owlus --
 
-
+-- // ожидание полной загрузки клиента
 if not game:IsLoaded() then game.Loaded:Wait() end
 
+-- // определение положения игрока (игра, лобби)
 local function identify_game_state()
     local players = game:GetService("Players")
     local temp_player = players.LocalPlayer or players.PlayerAdded:Wait()
@@ -20,9 +21,11 @@ end
 
 local game_state = identify_game_state()
 
+-- // определение HTTP-функции
 local send_request = request or http_request or httprequest
     or GetDevice and GetDevice().request
 
+-- // проверка на доступность HTTP вызова
 if not send_request then 
     warn("failure: no http function") 
     return 
@@ -36,6 +39,7 @@ local players_service = game:GetService("Players")
 local local_player = players_service.LocalPlayer or players_service.PlayerAdded:Wait()
 local player_gui = local_player:WaitForChild("PlayerGui")
 
+-- // флажки для предотвращения повторного запуска
 local back_to_lobby_running = false
 local auto_pickups_running = false
 local auto_skip_running = false
@@ -85,7 +89,7 @@ if game_state == "GAME" then
     end)
 end
 
--- // проверить, вернул ли удаленный сервер действительный ответ
+-- // проверка: вернул ли удаленный сервер действительный ответ
 local function check_res_ok(data)
     if data == true then return true end
     if type(data) == "table" and data.Success == true then return true end
@@ -102,7 +106,7 @@ end
 
 -- // утилита для обработки данных матчей
 local function get_all_rewards()
-    local results = {
+    local results = {    
         Coins = 0, 
         Gems = 0, 
         XP = 0, 
@@ -175,6 +179,7 @@ local function send_to_lobby()
     lobby_remote:FireServer()
 end
 
+-- // обработка конца матча (сбор инфы с экрана наград) (Возврат в лобби) (Пост вебхука)
 local function handle_post_match()
     local ui_root
     repeat
@@ -453,6 +458,7 @@ local function get_current_wave()
     return tonumber(wave_num) or 0
 end
 
+-- // размещает башню, пока сервер не подтвердит успех
 local function do_place_tower(t_name, t_pos)
     while true do
         local ok, res = pcall(function()
@@ -466,7 +472,7 @@ local function do_place_tower(t_name, t_pos)
         task.wait(0.25)
     end
 end
-
+-- // апгрейд башни по ветке
 local function do_upgrade_tower(t_obj, path_id)
     while true do
         local ok, res = pcall(function()
@@ -479,7 +485,7 @@ local function do_upgrade_tower(t_obj, path_id)
         task.wait(0.25)
     end
 end
-
+-- // продажа башни
 local function do_sell_tower(t_obj)
     while true do
         local ok, res = pcall(function()
@@ -489,7 +495,7 @@ local function do_sell_tower(t_obj)
         task.wait(0.25)
     end
 end
-
+-- // установка параметров башни (например режим атаки)
 local function do_set_option(t_obj, opt_name, opt_val, req_wave)
     if req_wave then
         repeat task.wait(0.3) until get_current_wave() >= req_wave
@@ -508,6 +514,12 @@ local function do_set_option(t_obj, opt_name, opt_val, req_wave)
     end
 end
 
+
+-- // Активирует способность башни //
+--  одиночную активацию
+--  циклическую (loop)
+--  случайные позиции
+--  клонирование и таргетинг других башен
 local function do_activate_ability(t_obj, ab_name, ab_data, is_looping)
     if type(ab_data) == "boolean" then
         is_looping = ab_data
@@ -532,7 +544,7 @@ local function do_activate_ability(t_obj, ab_name, ab_data, is_looping)
                 if ab_data then
                     data = table.clone(ab_data)
 
-                    -- 🎯 RANDOMIZE HERE (every attempt)
+                    -- рандом
                     if positions and #positions > 0 then
                         data.towerPosition = positions[math.random(#positions)]
                     end
@@ -581,7 +593,7 @@ local function do_activate_ability(t_obj, ab_name, ab_data, is_looping)
 end
 
 -- // public api
--- lobby
+-- выбор режима игры
 function TDS:Mode(difficulty)
     if game_state ~= "LOBBY" then 
         return false 
@@ -632,7 +644,7 @@ function TDS:Mode(difficulty)
 
     return true
 end
-
+-- экипировка башен (Эксперементально)
 function TDS:Loadout(...)
     if game_state ~= "LOBBY" then
         return false
@@ -665,6 +677,7 @@ function TDS:Loadout(...)
     return true
 end
 
+-- опен-сурс аддон на баг
 function TDS:Addons()
     if game_state ~= "GAME" then
         return false
@@ -949,7 +962,7 @@ local function start_back_to_lobby()
         back_to_lobby_running = false
     end)
 end
-
+-- // анти-лаг (удаляет визуальные элементы)
 local function start_anti_lag()
     if anti_lag_running then return end
     anti_lag_running = true
@@ -987,6 +1000,7 @@ local function start_anti_lag()
     end)
 end
 
+-- // анти-AFK
 local function start_anti_afk()
     local Players = game:GetService("Players")
     local GC = getconnections and getconnections or get_signal_cons
