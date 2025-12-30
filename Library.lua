@@ -106,10 +106,12 @@ end
 
 -- // утилита для обработки данных матчей
 local function get_all_rewards()
-    local results = {    
+    local results = {
         Coins = 0, 
         Gems = 0, 
         XP = 0, 
+        Wave = 0,
+        Level = 0,
         Time = "00:00",
         Status = "UNKNOWN",
         Others = {} 
@@ -138,6 +140,18 @@ local function get_all_rewards()
     if top_banner and top_banner:FindFirstChild("textLabel") then
         local txt = top_banner.textLabel.Text:upper()
         results.Status = txt:find("TRIUMPH") and "WIN" or (txt:find("LOST") and "LOSS" or "UNKNOWN")
+    end
+
+    local level_value = local_player.Level
+    if level_value then
+        results.Level = level_value.Value or 0
+    end
+
+    local label = player_gui:WaitForChild("ReactGameTopGameDisplay").Frame.wave.container.value
+    local wave_num = label.Text:match("^(%d+)")
+
+    if wave_num then
+        results.Wave = tonumber(wave_num) or 0
     end
 
     local section_rewards = rewards_screen and rewards_screen:FindFirstChild("RewardsSection")
@@ -171,6 +185,7 @@ local function get_all_rewards()
     
     return results
 end
+
 
 -- // lobby / teleporting
 local function send_to_lobby()
@@ -218,9 +233,13 @@ local function handle_post_match()
         embeds = {{
             title = (match.Status == "ПОБЕДА" and "🏆 TRIUMPH" or "💀 DEFEAT"),
             color = (match.Status == "ПОБЕДА" and 0x2ecc71 or 0xe74c3c),
-            description = "### 📋 Обзор матча\n" ..
-                          "> **Статус:** `" .. match.Status .. "`\n" ..
-                          "> **Время:** `" .. match.Time .. "`",
+            description =
+                "### 📋 Итоги матча\n" ..
+                "> **Status:** `" .. match.Status .. "`\n" ..
+                "> **Time:** `" .. match.Time .. "`\n" ..
+                "> **Current Level:** `" .. match.Level .. "`\n" ..
+                "> **Wave:** `" .. match.Wave .. "`\n",
+                
             fields = {
                 {
                     name = "✨ Награды",
@@ -237,7 +256,7 @@ local function handle_post_match()
                 },
                 {
                     name = "📊 Итоги сессии",
-                    value = "```py\n# Общая сумма\nCoins: " .. current_total_coins .. "\nГемы:  " .. current_total_gems .. "```",
+                    value = "```py\n# Total Amount\nCoins: " .. current_total_coins .. "\nGems:  " .. current_total_gems .. "```",
                     inline = true
                 }
             },
@@ -255,48 +274,52 @@ local function handle_post_match()
         })
     end)
 
+    task.wait(1.5)
+
     send_to_lobby()
 end
 
 local function log_match_start()
     if not _G.SendWebhook then return end
-
+    if type(_G.Webhook) ~= "string" or _G.Webhook == "" then return end
+    if _G.Webhook:find("YOUR%-WEBHOOK") then return end
+    
     local start_payload = {
         username = "TDS AutoStrat",
         embeds = {{
             title = "🚀 **Матч Начался Успешно**",
-            description = "AutoStrat успешно загрузился в новую игровую сессию и начинает выполнение.",
+            description = "AutoStrat успешно загрузилась в новую игровую сессию и начинает выполнение.",
             color = 3447003,
-            
             fields = {
-                { 
-                    name = "🪙 Начальные монеты", 
-                    value = "```" .. tostring(start_coins) .. " Монеточки```", 
-                    inline = true 
+                {
+                    name = "🪙 Начальные монетки",
+                    value = "```" .. tostring(start_coins) .. " Coins```",
+                    inline = true
                 },
-                { 
-                    name = "💎 Начальные гемы", 
-                    value = "```" .. tostring(start_gems) .. " Гемы```", 
-                    inline = true 
+                {
+                    name = "💎 Начальные гемы",
+                    value = "```" .. tostring(start_gems) .. " Gems```",
+                    inline = true
                 },
-                { 
-                    name = "Статус", 
-                    value = "🟢 Скрипт выполняется", 
-                    inline = false 
+                {
+                    name = "Статус",
+                    value = "🟢 Скрипт выполняется",
+                    inline = false
                 }
             },
-            
             footer = { text = "Зарегистрировано для " .. local_player.Name .. " • TDS AutoStrat" },
             timestamp = DateTime.now():ToIsoDate()
         }}
     }
 
-    send_request({
-        Url = _G.Webhook,
-        Method = "POST",
-        Headers = { ["Content-Type"] = "application/json" },
-        Body = game:GetService("HttpService"):JSONEncode(start_payload)
-    })
+    pcall(function()
+        send_request({
+            Url = _G.Webhook,
+            Method = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body = game:GetService("HttpService"):JSONEncode(start_payload)
+        })
+    end)
 end
 
 -- // голосование & выбор карты
@@ -383,6 +406,7 @@ end
 
 
 -- // timescale logic
+-- // timescale logic
 local function set_game_timescale(target_val)
     local speed_list = {0, 0.5, 1, 1.5, 2}
 
@@ -433,7 +457,7 @@ local function unlock_speed_tickets()
     end
 end
 
--- // управление в игре
+-- // ingame control
 local function trigger_restart()
     local ui_root = player_gui:WaitForChild("ReactGameNewRewards")
     local found_section = false
@@ -458,7 +482,6 @@ local function get_current_wave()
     return tonumber(wave_num) or 0
 end
 
--- // размещает башню, пока сервер не подтвердит успех
 local function do_place_tower(t_name, t_pos)
     while true do
         local ok, res = pcall(function()
@@ -472,7 +495,7 @@ local function do_place_tower(t_name, t_pos)
         task.wait(0.25)
     end
 end
--- // апгрейд башни по ветке
+
 local function do_upgrade_tower(t_obj, path_id)
     while true do
         local ok, res = pcall(function()
@@ -485,7 +508,7 @@ local function do_upgrade_tower(t_obj, path_id)
         task.wait(0.25)
     end
 end
--- // продажа башни
+
 local function do_sell_tower(t_obj)
     while true do
         local ok, res = pcall(function()
@@ -495,7 +518,7 @@ local function do_sell_tower(t_obj)
         task.wait(0.25)
     end
 end
--- // установка параметров башни (например режим атаки)
+
 local function do_set_option(t_obj, opt_name, opt_val, req_wave)
     if req_wave then
         repeat task.wait(0.3) until get_current_wave() >= req_wave
@@ -514,12 +537,6 @@ local function do_set_option(t_obj, opt_name, opt_val, req_wave)
     end
 end
 
-
--- // Активирует способность башни //
---  одиночную активацию
---  циклическую (loop)
---  случайные позиции
---  клонирование и таргетинг других башен
 local function do_activate_ability(t_obj, ab_name, ab_data, is_looping)
     if type(ab_data) == "boolean" then
         is_looping = ab_data
@@ -544,7 +561,7 @@ local function do_activate_ability(t_obj, ab_name, ab_data, is_looping)
                 if ab_data then
                     data = table.clone(ab_data)
 
-                    -- рандом
+                    -- 🎯 RANDOMIZE HERE (every attempt)
                     if positions and #positions > 0 then
                         data.towerPosition = positions[math.random(#positions)]
                     end
@@ -593,7 +610,7 @@ local function do_activate_ability(t_obj, ab_name, ab_data, is_looping)
 end
 
 -- // public api
--- выбор режима игры
+-- lobby
 function TDS:Mode(difficulty)
     if game_state ~= "LOBBY" then 
         return false 
@@ -621,7 +638,7 @@ function TDS:Mode(difficulty)
                     })
                 elseif difficulty == "Polluted" then
                     return remote:InvokeServer("Multiplayer", "v2:start", {
-                        mode = "Polluted",
+                        mode = "polluted",
                         count = 1
                     })
                 else
@@ -644,7 +661,7 @@ function TDS:Mode(difficulty)
 
     return true
 end
--- экипировка башен (Эксперементально)
+
 function TDS:Loadout(...)
     if game_state ~= "LOBBY" then
         return false
@@ -677,7 +694,6 @@ function TDS:Loadout(...)
     return true
 end
 
--- опен-сурс аддон на баг
 function TDS:Addons()
     if game_state ~= "GAME" then
         return false
@@ -735,6 +751,9 @@ function TDS:StartGame()
 end
 
 function TDS:Ready()
+    if game_state ~= "GAME" then
+        return false 
+    end
     match_ready_up()
 end
 
@@ -750,9 +769,15 @@ function TDS:Place(t_name, px, py, pz)
     if game_state ~= "GAME" then
         return false 
     end
+    
     local existing = {}
     for _, child in ipairs(workspace.Towers:GetChildren()) do
-        existing[child] = true
+        for _, sub_child in ipairs(child:GetChildren()) do
+            if sub_child.Name == "Owner" and sub_child.Value == local_player.UserId then
+                existing[child] = true
+                break
+            end
+        end
     end
 
     do_place_tower(t_name, Vector3.new(px, py, pz))
@@ -761,9 +786,14 @@ function TDS:Place(t_name, px, py, pz)
     repeat
         for _, child in ipairs(workspace.Towers:GetChildren()) do
             if not existing[child] then
-                new_t = child
-                break
+                for _, sub_child in ipairs(child:GetChildren()) do
+                    if sub_child.Name == "Owner" and sub_child.Value == local_player.UserId then
+                        new_t = child
+                        break
+                    end
+                end
             end
+            if new_t then break end
         end
         task.wait(0.05)
     until new_t
@@ -844,10 +874,10 @@ function TDS:AutoChain(...)
         local i = 1
         while running do
             local idx = tower_indices[i]
-            local tower = self.placed_towers[idx]
+            local tower = TDS.placed_towers[idx]
 
             if tower then
-                do_activate_ability(tower, "Call to Arms")
+                do_activate_ability(tower, "Call Of Arms")
             end
 
             local hotbar = player_gui.ReactUniversalHotbar.Frame
@@ -882,7 +912,6 @@ function TDS:SetOption(idx, name, val, req_wave)
     end
     return false
 end
-
 -- // misc utility
 local function is_void_charm(obj)
     return math.abs(obj.Position.Y) > 999999
@@ -1029,10 +1058,21 @@ local function start_anti_afk()
     end)
 end
 
+local function start_rejoin_on_disconnect()
+    task.spawn(function()
+        game.Players.PlayerRemoving:connect(function (plr)
+            if plr == game.Players.LocalPlayer then
+                game:GetService('TeleportService'):Teleport(3260590327, plr)
+            end
+        end)
+    end)
+end
+
 start_back_to_lobby()
 start_auto_skip()
 start_auto_pickups()
 start_anti_lag()
 start_anti_afk()
+start_rejoin_on_disconnect()
 
 return TDS
