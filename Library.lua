@@ -54,9 +54,12 @@ local ItemNames = {
     ["18443277308"] = "Low Grade Consumable Crate(s)",
     ["136180382135048"] = "Santa Radio(s)",
     ["18443277106"] = "Mid Grade Consumable Crate(s)",
+    ["18443277591"] = "High Grade Consumable Crate(s)",
     ["132155797622156"] = "Christmas Tree(s)",
     ["124065875200929"] = "Fruit Cake(s)",
     ["17429541513"] = "Barricade(s)",
+    ["110415073436604"] = "Holy Hand Grenade(s)",
+    ["139414922355803"] = "Present Clusters(s)"
 }
 
 -- // Тавер менеджмент кор
@@ -64,6 +67,7 @@ local TDS = {
     placed_towers = {},
     active_strat = true
 }
+
 local upgrade_history = {}
 
 -- // ссылка на аддон
@@ -201,7 +205,7 @@ local function handle_post_match()
             bonus_string = bonus_string .. "🎁 **" .. res.Amount .. " " .. res.Name .. "**\n"
         end
     else
-        bonus_string = "_No bonus rewards found._"
+        bonus_string = "_Бонусы разворованы._"
     end
 
     local post_data = {
@@ -372,6 +376,7 @@ local function cast_modifier_vote(mods_table)
     end)
 end
 
+
 -- // timescale logic
 local function set_game_timescale(target_val)
     local speed_list = {0, 0.5, 1, 1.5, 2}
@@ -527,7 +532,7 @@ local function do_activate_ability(t_obj, ab_name, ab_data, is_looping)
                 if ab_data then
                     data = table.clone(ab_data)
 
-                    -- РАНДОМИЗАЦИЯ (каждая попытка)
+                    -- 🎯 RANDOMIZE HERE (every attempt)
                     if positions and #positions > 0 then
                         data.towerPosition = positions[math.random(#positions)]
                     end
@@ -602,6 +607,11 @@ function TDS:Mode(difficulty)
                         mode = "halloween",
                         count = 1
                     })
+                elseif difficulty == "Polluted" then
+                    return remote:InvokeServer("Multiplayer", "v2:start", {
+                        mode = "Polluted",
+                        count = 1
+                    })
                 else
                     return remote:InvokeServer("Multiplayer", "v2:start", {
                         difficulty = difficulty,
@@ -624,46 +634,57 @@ function TDS:Mode(difficulty)
 end
 
 function TDS:Loadout(...)
-    if game_state ~= "LOBBY" then 
-        return false 
+    if game_state ~= "LOBBY" then
+        return false
     end
 
     local lobby_hud = player_gui:WaitForChild("ReactLobbyHud", 30)
-    local frame = lobby_hud and lobby_hud:WaitForChild("Frame", 30)
-    local match_making = frame and frame:WaitForChild("matchmaking", 30)
+    local frame = lobby_hud:WaitForChild("Frame", 30)
+    frame:WaitForChild("matchmaking", 30)
 
-    if match_making then
-        local towers = {...}
-        local remote = game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunction")
-        for _, tower_name in ipairs(towers) do
-            if tower_name and tower_name ~= "" then
-                pcall(function()
+    local towers = {...}
+    local remote = game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunction")
+
+    for _, tower_name in ipairs(towers) do
+        if tower_name and tower_name ~= "" then
+            local success = false
+            repeat
+                local ok = pcall(function()
                     remote:InvokeServer("Inventory", "Equip", "tower", tower_name)
                 end)
-                task.wait(0.5)
-            end
+                if ok then
+                    success = true
+                else
+                    task.wait(0.2)
+                end
+            until success
+            task.wait(0.4)
         end
     end
+
+    return true
 end
 
--- // load addons
 function TDS:Addons()
-    if game_state ~= "GAME" then 
-        return false 
+    if game_state ~= "GAME" then
+        return false
     end
     local url = "https://api.junkie-development.de/api/v1/luascripts/public/57fe397f76043ce06afad24f07528c9f93e97730930242f57134d0b60a2d250b/download"
     local success, code = pcall(game.HttpGet, game, url)
-    
-    if success then
-        loadstring(code)()
 
-        repeat 
-            task.wait(0.5) 
-        until TDS.Equip
-        
-        return true
+    if not success then
+        return false
     end
+
+    loadstring(code)()
+
+    while not TDS.Equip do
+        task.wait(0.1)
+    end
+
+    return true
 end
+
 -- ingame
 function TDS:TeleportToLobby()
     send_to_lobby()
@@ -849,7 +870,7 @@ function TDS:SetOption(idx, name, val, req_wave)
     return false
 end
 
--- // утилита для различных целей
+-- // misc utility
 local function is_void_charm(obj)
     return math.abs(obj.Position.Y) > 999999
 end
@@ -929,7 +950,7 @@ local function start_back_to_lobby()
     end)
 end
 
-local function start_anit_lag()
+local function start_anti_lag()
     if anti_lag_running then return end
     anti_lag_running = true
 
@@ -966,9 +987,38 @@ local function start_anit_lag()
     end)
 end
 
+local function start_anti_afk()
+    local Players = game:GetService("Players")
+    local GC = getconnections and getconnections or get_signal_cons
+
+    if GC then
+        for i, v in pairs(GC(Players.LocalPlayer.Idled)) do
+            if v.Disable then
+                v:Disable()
+            elseif v.Disconnect then
+                v:Disconnect()
+            end
+        end
+    else
+        Players.LocalPlayer.Idled:Connect(function()
+            local VirtualUser = game:GetService("VirtualUser")
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton2(Vector2.new())
+        end)
+    end
+
+    local ANTIAFK = Players.LocalPlayer.Idled:Connect(function()
+        local VirtualUser = game:GetService("VirtualUser")
+        VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+        task.wait(1)
+        VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    end)
+end
+
 start_back_to_lobby()
 start_auto_skip()
 start_auto_pickups()
-start_anit_lag()
+start_anti_lag()
+start_anti_afk()
 
 return TDS
