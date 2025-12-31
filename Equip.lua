@@ -99,7 +99,7 @@ frame.Parent = screenGui
 Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 4)
 
 local title = Instance.new("TextLabel")
-title.Text = "Tower Equipper"
+title.Text = "Башенка селектер"
 title.Size = UDim2.new(1, 0, 0, 30)
 title.BackgroundTransparency = 1
 title.TextColor3 = Color3.fromRGB(230, 230, 230)
@@ -108,7 +108,7 @@ title.TextSize = 20
 title.Parent = frame
 
 local textbox = Instance.new("TextBox")
-textbox.PlaceholderText = "Loading Key System..."
+textbox.PlaceholderText = "Загрузка системы ключа..."
 textbox.Size = UDim2.new(1, -20, 0, 30)
 textbox.Position = UDim2.new(0, 10, 0, 40)
 textbox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
@@ -122,7 +122,7 @@ Instance.new("UICorner", textbox).CornerRadius = UDim.new(0, 4)
 
 task.spawn(function()
     if TDS:Addons() then
-        textbox.PlaceholderText = "Type tower name..."
+        textbox.PlaceholderText = "Введите название башни..."
         textbox.TextEditable = true
     end
 end)
