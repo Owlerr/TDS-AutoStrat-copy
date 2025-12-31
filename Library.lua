@@ -1,14 +1,15 @@
 -- MADE BY Owlus --
 
--- // ожидание полной загрузки клиента
+-- ожидание полной загрузки игры
 if not game:IsLoaded() then game.Loaded:Wait() end
 
--- // определение положения игрока (игра, лобби)
+-- определение текущего состояния игры
 local function identify_game_state()
     local players = game:GetService("Players")
     local temp_player = players.LocalPlayer or players.PlayerAdded:Wait()
     local temp_gui = temp_player:WaitForChild("PlayerGui")
     
+    -- проверка GUI до тех пор пока не найдём нужный
     while true do
         if temp_gui:FindFirstChild("LobbyGui") then
             return "LOBBY"
@@ -19,19 +20,20 @@ local function identify_game_state()
     end
 end
 
+-- тжекущее состояние игры
 local game_state = identify_game_state()
 
--- // определение HTTP-функции
+-- определение доступной HTTP-функции (зависит от экзекьютора)
 local send_request = request or http_request or httprequest
     or GetDevice and GetDevice().request
 
--- // проверка на доступность HTTP вызова
+-- HTTP-запросы недоступны == завершение скрипта
 if not send_request then 
     warn("failure: no http function") 
     return 
 end
 
--- // сервис & главные ссылки
+-- // roblox сервисы  и основные ссылки
 local replicated_storage = game:GetService("ReplicatedStorage")
 local remote_func = replicated_storage:WaitForChild("RemoteFunction")
 local remote_event = replicated_storage:WaitForChild("RemoteEvent")
@@ -39,13 +41,13 @@ local players_service = game:GetService("Players")
 local local_player = players_service.LocalPlayer or players_service.PlayerAdded:Wait()
 local player_gui = local_player:WaitForChild("PlayerGui")
 
--- // флажки для предотвращения повторного запуска
+-- флажки для предотвращения повторного запуска
 local back_to_lobby_running = false
 local auto_pickups_running = false
 local auto_skip_running = false
 local anti_lag_running = false
 
--- // иконки предметов, позже добавлю больше
+-- // id иконок предметов
 local ItemNames = {
     ["17447507910"] = "Timescale Ticket(s)",
     ["17438486690"] = "Range Flag(s)",
@@ -66,18 +68,23 @@ local ItemNames = {
     ["139414922355803"] = "Present Clusters(s)"
 }
 
--- // Тавер менеджмент кор
+-- // основная таблица управления стратегией
 local TDS = {
     placed_towers = {},
-    active_strat = true
+    active_strat = true,
+    matchmaking_map = {
+        ["Hardcore"] = "hardcore",
+        ["Pizza Party"] = "halloween",
+        ["Polluted"] = "polluted"
+    }
 }
 
+-- история апгрейдов башен
 local upgrade_history = {}
 
--- // ссылка на аддон
 shared.TDS_Table = TDS
 
--- // треккинг кол-ва денег
+-- // отслеживание валюты
 local start_coins, current_total_coins, start_gems, current_total_gems = 0, 0, 0, 0
 if game_state == "GAME" then
     pcall(function()
@@ -89,7 +96,7 @@ if game_state == "GAME" then
     end)
 end
 
--- // проверка: вернул ли удаленный сервер действительный ответ
+-- // проверка корректности ответа от RemoteFunction
 local function check_res_ok(data)
     if data == true then return true end
     if type(data) == "table" and data.Success == true then return true end
@@ -104,20 +111,20 @@ local function check_res_ok(data)
     return false
 end
 
--- // утилита для обработки данных матчей
+--/ сбор наград и статистики матча
 local function get_all_rewards()
     local results = {
-        Coins = 0, 
-        Gems = 0, 
-        XP = 0, 
+        Coins = 0,
+        Gems = 0,
+        XP = 0,
         Wave = 0,
         Level = 0,
         Time = "00:00",
         Status = "UNKNOWN",
-        Others = {} 
+        Others = {}
     }
-    
-    local ui_root = player_gui:FindFirstChild("ReactGameNewRewards")
+
+   local ui_root = player_gui:FindFirstChild("ReactGameNewRewards")
     local main_frame = ui_root and ui_root:FindFirstChild("Frame")
     local game_over = main_frame and main_frame:FindFirstChild("gameOver")
     local rewards_screen = game_over and game_over:FindFirstChild("RewardsScreen")
@@ -186,15 +193,14 @@ local function get_all_rewards()
     return results
 end
 
-
--- // lobby / teleporting
+-- / тп обратно в лобби
 local function send_to_lobby()
     task.wait(1)
     local lobby_remote = game.ReplicatedStorage.Network.Teleport["RE:backToLobby"]
     lobby_remote:FireServer()
 end
 
--- // обработка конца матча (сбор инфы с экрана наград) (Возврат в лобби) (Пост вебхука)
+-- // обработка окончания матча (награды, вебхук, возврат в лобби)
 local function handle_post_match()
     local ui_root
     repeat
@@ -225,7 +231,7 @@ local function handle_post_match()
             bonus_string = bonus_string .. "🎁 **" .. res.Amount .. " " .. res.Name .. "**\n"
         end
     else
-        bonus_string = "_Бонусы разворованы._"
+        bonus_string = "_Бонусов нет._"
     end
 
     local post_data = {
@@ -256,11 +262,11 @@ local function handle_post_match()
                 },
                 {
                     name = "📊 Итоги сессии",
-                    value = "```py\n# Total Amount\nCoins: " .. current_total_coins .. "\nGems:  " .. current_total_gems .. "```",
+                    value = "```py\n# Конечное кол-во\nМонетки: " .. current_total_coins .. "\nГемы:  " .. current_total_gems .. "```",
                     inline = true
                 }
             },
-            footer = { text = "Зарегистрировано для " .. local_player.Name .. " • TDS AutoStrat" },
+            footer = { text = "Зарегестрировано для " .. local_player.Name .. " • TDS AutoStrat" },
             timestamp = DateTime.now():ToIsoDate()
         }}
     }
@@ -279,6 +285,7 @@ local function handle_post_match()
     send_to_lobby()
 end
 
+-- // Логирование старта матча в ds
 local function log_match_start()
     if not _G.SendWebhook then return end
     if type(_G.Webhook) ~= "string" or _G.Webhook == "" then return end
@@ -287,27 +294,27 @@ local function log_match_start()
     local start_payload = {
         username = "TDS AutoStrat",
         embeds = {{
-            title = "🚀 **Матч Начался Успешно**",
-            description = "AutoStrat успешно загрузилась в новую игровую сессию и начинает выполнение.",
+            title = "✅ **Матч Начался Успешно**",
+            description = "AutoStrat успешно загрузился в новую игровую сессию и начинает выполнение.",
             color = 3447003,
             fields = {
                 {
-                    name = "🪙 Начальные монетки",
+                    name = "🪙 Начальные моентки",
                     value = "```" .. tostring(start_coins) .. " Coins```",
                     inline = true
                 },
                 {
-                    name = "💎 Начальные гемы",
+                    name = "💎 Начальные гемчки",
                     value = "```" .. tostring(start_gems) .. " Gems```",
                     inline = true
                 },
                 {
-                    name = "Статус",
-                    value = "🟢 Скрипт выполняется",
+                    name = "Status",
+                    value = "🟢 Скрипт выполняются",
                     inline = false
                 }
             },
-            footer = { text = "Зарегистрировано для " .. local_player.Name .. " • TDS AutoStrat" },
+            footer = { text = "Зарегестрировано для " .. local_player.Name .. " • TDS AutoStrat" },
             timestamp = DateTime.now():ToIsoDate()
         }}
     }
@@ -322,7 +329,7 @@ local function log_match_start()
     end)
 end
 
--- // голосование & выбор карты
+-- // автоголосование за skip
 local function run_vote_skip()
     while true do
         local success = pcall(function()
@@ -333,8 +340,9 @@ local function run_vote_skip()
     end
 end
 
+-- 
 local function match_ready_up()
-    local player_gui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+     local player_gui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
     
     local ui_overrides = player_gui:WaitForChild("ReactOverridesVote", 30)
     local main_frame = ui_overrides and ui_overrides:WaitForChild("Frame", 30)
@@ -369,18 +377,21 @@ local function match_ready_up()
     log_match_start()
 end
 
+-- принудительный выбор карты
 local function cast_map_vote(map_id, pos_vec)
     local target_map = map_id or "Simplicity"
     local target_pos = pos_vec or Vector3.new(0,0,0)
     remote_event:FireServer("LobbyVoting", "Vote", target_map, target_pos)
 end
 
+-- подтверждение готовности
 local function lobby_ready_up()
     pcall(function()
         remote_event:FireServer("LobbyVoting", "Ready")
     end)
 end
 
+-- выбор карты через Override
 local function select_map_override(map_id)
     remote_func:InvokeServer("LobbyVoting", "Override", map_id)
     task.wait(3)
@@ -390,8 +401,9 @@ local function select_map_override(map_id)
     match_ready_up()
 end
 
+-- выбор модификаровл
 local function cast_modifier_vote(mods_table)
-    local bulk_modifiers = replicated_storage:WaitForChild("Network"):WaitForChild("Modifiers"):WaitForChild("RF:BulkVoteModifiers")
+     local bulk_modifiers = replicated_storage:WaitForChild("Network"):WaitForChild("Modifiers"):WaitForChild("RF:BulkVoteModifiers")
     local selected_mods = mods_table or {
         HiddenEnemies = true, Glass = true, ExplodingEnemies = true,
         Limitation = true, Committed = true, HealthyEnemies = true,
@@ -405,10 +417,9 @@ local function cast_modifier_vote(mods_table)
 end
 
 
--- // timescale logic
--- // timescale logic
+-- TimeScale
 local function set_game_timescale(target_val)
-    local speed_list = {0, 0.5, 1, 1.5, 2}
+   local speed_list = {0, 0.5, 1, 1.5, 2}
 
     local target_idx
     for i, v in ipairs(speed_list) do
@@ -447,6 +458,7 @@ local function set_game_timescale(target_val)
     end
 end
 
+-- // разблокировка ускорения при наличии тикетов
 local function unlock_speed_tickets()
     if local_player.TimescaleTickets.Value >= 1 then
         if game.Players.LocalPlayer.PlayerGui.ReactUniversalHotbar.Frame.timescale.Lock.Visible then
@@ -457,9 +469,9 @@ local function unlock_speed_tickets()
     end
 end
 
--- // ingame control
+-- принудительный рестарт матча
 local function trigger_restart()
-    local ui_root = player_gui:WaitForChild("ReactGameNewRewards")
+     local ui_root = player_gui:WaitForChild("ReactGameNewRewards")
     local found_section = false
 
     repeat
@@ -476,12 +488,14 @@ local function trigger_restart()
     run_vote_skip()
 end
 
+
 local function get_current_wave()
     local label = player_gui:WaitForChild("ReactGameTopGameDisplay").Frame.wave.container.value
     local wave_num = label.Text:match("^(%d+)")
     return tonumber(wave_num) or 0
 end
 
+-- размещение башни
 local function do_place_tower(t_name, t_pos)
     while true do
         local ok, res = pcall(function()
@@ -561,7 +575,6 @@ local function do_activate_ability(t_obj, ab_name, ab_data, is_looping)
                 if ab_data then
                     data = table.clone(ab_data)
 
-                    -- 🎯 RANDOMIZE HERE (every attempt)
                     if positions and #positions > 0 then
                         data.towerPosition = positions[math.random(#positions)]
                     end
@@ -626,28 +639,24 @@ function TDS:Mode(difficulty)
     local res
         repeat
             local ok, result = pcall(function()
-                if difficulty == "Hardcore" then
-                    return remote:InvokeServer("Multiplayer", "v2:start", {
-                        mode = "hardcore",
+                local mode = TDS.matchmaking_map[difficulty]
+
+                local payload
+
+                if mode then
+                    payload = {
+                        mode = mode,
                         count = 1
-                    })
-                elseif difficulty == "Pizza Party" then
-                    return remote:InvokeServer("Multiplayer", "v2:start", {
-                        mode = "halloween",
-                        count = 1
-                    })
-                elseif difficulty == "Polluted" then
-                    return remote:InvokeServer("Multiplayer", "v2:start", {
-                        mode = "polluted",
-                        count = 1
-                    })
+                    }
                 else
-                    return remote:InvokeServer("Multiplayer", "v2:start", {
+                    payload = {
                         difficulty = difficulty,
                         mode = "survival",
                         count = 1
-                    })
+                    }
                 end
+
+                return remote:InvokeServer("Multiplayer", "v2:start", payload)
             end)
 
             if ok and check_res_ok(result) then
@@ -664,7 +673,25 @@ end
 
 function TDS:Loadout(...)
     if game_state ~= "LOBBY" then
-        return false
+        local towers = {...}
+        local remote = game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunction")
+        for _, tower_name in ipairs(towers) do
+            if tower_name and tower_name ~= "" then
+                local success = false
+                repeat
+                    local ok = pcall(function()
+                        remote:InvokeServer("Inventory", "Equip", "tower", tower_name)
+                    end)
+                    if ok then
+                        success = true
+                    else
+                        task.wait(0.2)
+                    end
+                until success
+                task.wait(0.4)
+            end
+        end
+        return true
     end
 
     local lobby_hud = player_gui:WaitForChild("ReactLobbyHud", 30)
@@ -695,9 +722,6 @@ function TDS:Loadout(...)
 end
 
 function TDS:Addons()
-    if game_state ~= "GAME" then
-        return false
-    end
     local url = "https://api.junkie-development.de/api/v1/luascripts/public/57fe397f76043ce06afad24f07528c9f93e97730930242f57134d0b60a2d250b/download"
     local success, code = pcall(game.HttpGet, game, url)
 
@@ -707,7 +731,7 @@ function TDS:Addons()
 
     loadstring(code)()
 
-    while not TDS.Equip do
+    while not (TDS.Equip and TDS.MultiMode and TDS.Multiplayer) do
         task.wait(0.1)
     end
 
@@ -719,11 +743,31 @@ function TDS:TeleportToLobby()
     send_to_lobby()
 end
 
-function TDS:VoteSkip(req_wave)
-    if req_wave then
-        repeat task.wait(0.5) until get_current_wave() >= req_wave
-    end
-    run_vote_skip()
+function TDS:VoteSkip(start_wave, end_wave)
+    task.spawn(function()
+        end_wave = end_wave or start_wave
+
+        for wave = start_wave, end_wave do
+            repeat
+                task.wait(0.5)
+            until get_current_wave() >= wave
+
+            local skip_done = false
+            while not skip_done do
+                local skip_visible = player_gui:FindFirstChild("ReactOverridesVote")
+                    and player_gui.ReactOverridesVote:FindFirstChild("Frame")
+                    and player_gui.ReactOverridesVote.Frame:FindFirstChild("votes")
+                    and player_gui.ReactOverridesVote.Frame.votes:FindFirstChild("vote")
+
+                if skip_visible then
+                    run_vote_skip()
+                    skip_done = true
+                else
+                    task.wait(0.2)
+                end
+            end
+        end
+    end)
 end
 
 function TDS:GameInfo(name, list)
@@ -839,23 +883,25 @@ function TDS:Sell(idx, req_wave)
 end
 
 function TDS:SellAll(req_wave)
-    if req_wave then
-        repeat task.wait(0.5) until get_current_wave() >= req_wave
-    end
+    task.spawn(function()
+        if req_wave then
+            repeat task.wait(0.5) until get_current_wave() >= req_wave
+        end
 
-    local towers_copy = {unpack(self.placed_towers)}
-    for idx, t in ipairs(towers_copy) do
-        if do_sell_tower(t) then
-            for i, orig_t in ipairs(self.placed_towers) do
-                if orig_t == t then
-                    table.remove(self.placed_towers, i)
-                    break
+        local towers_copy = {unpack(self.placed_towers)}
+        for idx, t in ipairs(towers_copy) do
+            if do_sell_tower(t) then
+                for i, orig_t in ipairs(self.placed_towers) do
+                    if orig_t == t then
+                        table.remove(self.placed_towers, i)
+                        break
+                    end
                 end
             end
         end
-    end
 
-    return true
+        return true
+    end)
 end
 
 function TDS:Ability(idx, name, data, loop)
@@ -912,6 +958,7 @@ function TDS:SetOption(idx, name, val, req_wave)
     end
     return false
 end
+
 -- // misc utility
 local function is_void_charm(obj)
     return math.abs(obj.Position.Y) > 999999
@@ -991,7 +1038,7 @@ local function start_back_to_lobby()
         back_to_lobby_running = false
     end)
 end
--- // анти-лаг (удаляет визуальные элементы)
+
 local function start_anti_lag()
     if anti_lag_running then return end
     anti_lag_running = true
@@ -1029,7 +1076,6 @@ local function start_anti_lag()
     end)
 end
 
--- // анти-AFK
 local function start_anti_afk()
     local Players = game:GetService("Players")
     local GC = getconnections and getconnections or get_signal_cons
