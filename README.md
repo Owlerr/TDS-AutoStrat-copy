@@ -72,4 +72,4 @@ local TDS = loadstring(game:HttpGet("https://raw.githubusercontent.com/Owlerr/TD
 
 ## Политика использования и авторские права
 
-**Copyright © 2025 Owlus. Все права защищены.**
+**Copyright © 2026 Owlus. Все права защищены.**
